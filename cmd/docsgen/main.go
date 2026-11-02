@@ -233,8 +233,18 @@ func printSummary(pkg *parser.Package, docs []site.DocPage, outDir string) {
 }
 
 // runGenerate builds a site like site, then prints a build summary.
+// With --dry-run it parses and reports without writing anything.
 func runGenerate(args []string) error {
-	srcDir, outDir, docsDir, themeName, rest, err := parseGenerateArgs(args)
+	var dryRun bool
+	var plain []string
+	for _, arg := range args {
+		if arg == "--dry-run" {
+			dryRun = true
+			continue
+		}
+		plain = append(plain, arg)
+	}
+	srcDir, outDir, docsDir, themeName, rest, err := parseGenerateArgs(plain)
 	if err != nil {
 		return err
 	}
@@ -248,6 +258,11 @@ func runGenerate(args []string) error {
 	pkg, docs, err := loadForGenerate(srcDir, docsDir)
 	if err != nil {
 		return err
+	}
+	if dryRun {
+		printSummary(pkg, docs, outDir)
+		fmt.Println("(dry run: nothing written)")
+		return nil
 	}
 	if err := site.Generate(pkg, docs, theme, outDir); err != nil {
 		return err
