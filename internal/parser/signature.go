@@ -30,7 +30,9 @@ func funcSignature(fset *token.FileSet, decl *ast.FuncDecl) string {
 		b.WriteString(") ")
 	}
 	b.WriteString(decl.Name.Name)
-	b.WriteString(nodeString(fset, decl.Type))
+	// Printing a FuncType yields "func(params) results"; the keyword
+	// is redundant after the function name, so strip it.
+	b.WriteString(strings.TrimPrefix(nodeString(fset, decl.Type), "func"))
 	return b.String()
 }
 
