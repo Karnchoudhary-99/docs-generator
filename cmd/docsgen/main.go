@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/Karnchoudhary-99/docs-generator/internal/parser"
+	"github.com/Karnchoudhary-99/docs-generator/internal/site"
 )
 
 func main() {
@@ -19,6 +20,8 @@ func main() {
 	switch os.Args[1] {
 	case "parse":
 		err = runParse(os.Args[2:])
+	case "site":
+		err = runSite(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "docsgen: unknown command %q\n", os.Args[1])
 		usage()
@@ -32,6 +35,7 @@ func main() {
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: docsgen parse <dir> [--json]")
+	fmt.Fprintln(os.Stderr, "       docsgen site <srcdir> <outdir> [--theme classic|compact] [--docs <dir>]")
 }
 
 // runParse parses the Go package in dir and prints a summary, or JSON
@@ -64,6 +68,56 @@ func runParse(args []string) error {
 		return enc.Encode(pkg)
 	}
 	printPackage(pkg)
+	return nil
+}
+
+// runSite generates a Markdown site for the Go package in srcdir
+// into outdir, optionally including hand-written pages from docsDir.
+func runSite(args []string) error {
+	var srcDir, outDir, docsDir, themeName string
+	positional := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--theme":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--theme requires a value")
+			}
+			i++
+			themeName = args[i]
+		case strings.HasPrefix(arg, "--theme="):
+			themeName = strings.TrimPrefix(arg, "--theme=")
+		case arg == "--docs":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--docs requires a value")
+			}
+			i++
+			docsDir = args[i]
+		case strings.HasPrefix(arg, "--docs="):
+			docsDir = strings.TrimPrefix(arg, "--docs=")
+		case strings.HasPrefix(arg, "-"):
+			return fmt.Errorf("unknown flag %q", arg)
+		case positional == 0:
+			srcDir = arg
+			positional++
+		case positional == 1:
+			outDir = arg
+			positional++
+		default:
+			return fmt.Errorf("unexpected argument %q", arg)
+		}
+	}
+	if srcDir == "" || outDir == "" {
+		return fmt.Errorf("site requires <srcdir> and <outdir> arguments")
+	}
+	theme, err := site.ParseTheme(themeName)
+	if err != nil {
+		return err
+	}
+	if err := site.GenerateSite(srcDir, docsDir, outDir, theme); err != nil {
+		return err
+	}
+	fmt.Printf("site written to %s\n", outDir)
 	return nil
 }
 
