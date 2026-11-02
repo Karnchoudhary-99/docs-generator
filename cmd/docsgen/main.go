@@ -22,6 +22,8 @@ func main() {
 		err = runParse(os.Args[2:])
 	case "site":
 		err = runSite(os.Args[2:])
+	case "generate":
+		err = runGenerate(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "docsgen: unknown command %q\n", os.Args[1])
 		usage()
@@ -36,6 +38,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: docsgen parse <dir> [--json]")
 	fmt.Fprintln(os.Stderr, "       docsgen site <srcdir> <outdir> [--theme classic|compact] [--docs <dir>]")
+	fmt.Fprintln(os.Stderr, "       docsgen generate <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--dry-run]")
 }
 
 // runParse parses the Go package in dir and prints a summary, or JSON
@@ -158,4 +161,97 @@ func firstLine(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+// parseGenerateArgs parses the flags shared by generate and watch:
+// --theme, --docs, plus positional <srcdir> <outdir>. Any other flag
+// is returned in rest for the caller to reject.
+func parseGenerateArgs(args []string) (srcDir, outDir, docsDir, themeName string, rest []string, err error) {
+	positional := 0
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--theme":
+			if i+1 >= len(args) {
+				return "", "", "", "", nil, fmt.Errorf("--theme requires a value")
+			}
+			i++
+			themeName = args[i]
+		case strings.HasPrefix(arg, "--theme="):
+			themeName = strings.TrimPrefix(arg, "--theme=")
+		case arg == "--docs":
+			if i+1 >= len(args) {
+				return "", "", "", "", nil, fmt.Errorf("--docs requires a value")
+			}
+			i++
+			docsDir = args[i]
+		case strings.HasPrefix(arg, "--docs="):
+			docsDir = strings.TrimPrefix(arg, "--docs=")
+		case strings.HasPrefix(arg, "-"):
+			rest = append(rest, arg)
+		case positional == 0:
+			srcDir = arg
+			positional++
+		case positional == 1:
+			outDir = arg
+			positional++
+		default:
+			return "", "", "", "", nil, fmt.Errorf("unexpected argument %q", arg)
+		}
+	}
+	if srcDir == "" || outDir == "" {
+		return "", "", "", "", nil, fmt.Errorf("requires <srcdir> and <outdir> arguments")
+	}
+	return srcDir, outDir, docsDir, themeName, rest, nil
+}
+
+// loadForGenerate parses srcDir and optionally loads docsDir, for
+// generate and watch.
+func loadForGenerate(srcDir, docsDir string) (*parser.Package, []site.DocPage, error) {
+	pkg, err := parser.ParseDir(srcDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	var docs []site.DocPage
+	if docsDir != "" {
+		docs, err = site.LoadDocs(docsDir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("loading docs from %s: %w", docsDir, err)
+		}
+	}
+	return pkg, docs, nil
+}
+
+func printSummary(pkg *parser.Package, docs []site.DocPage, outDir string) {
+	s := site.Summarize(pkg, docs)
+	fmt.Printf("package %s: %d functions, %d types (%d methods), %d consts, %d vars, %d guides\n",
+		s.Package, s.Functions, s.Types, s.Methods, s.Consts, s.Vars, s.Guides)
+	fmt.Printf("files written to %s:\n", outDir)
+	for _, f := range s.Files {
+		fmt.Printf("  %s\n", f)
+	}
+}
+
+// runGenerate builds a site like site, then prints a build summary.
+func runGenerate(args []string) error {
+	srcDir, outDir, docsDir, themeName, rest, err := parseGenerateArgs(args)
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unknown flag %q", rest[0])
+	}
+	theme, err := site.ParseTheme(themeName)
+	if err != nil {
+		return err
+	}
+	pkg, docs, err := loadForGenerate(srcDir, docsDir)
+	if err != nil {
+		return err
+	}
+	if err := site.Generate(pkg, docs, theme, outDir); err != nil {
+		return err
+	}
+	printSummary(pkg, docs, outDir)
+	return nil
 }
