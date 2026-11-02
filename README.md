@@ -54,6 +54,40 @@ Output per site:
 
 A generated example lives in [`examples/sample-site`](examples/sample-site/).
 
+## CLI: generate, serve, watch
+
+`generate` is the one-command build: it parses, generates, and prints
+a build summary (symbol counts and the files written). `--dry-run`
+reports without writing anything.
+
+```sh
+# Full build with a summary
+go run ./cmd/docsgen generate ./internal/parser/testdata/samplepkg ./site \
+  --docs ./examples/docs
+
+# Preview what a build would produce, without writing files
+go run ./cmd/docsgen generate ./internal/parser/testdata/samplepkg ./site --dry-run
+```
+
+`serve` previews an already-generated site directory over HTTP.
+Directories resolve to their `index.md`; directories without one
+return 404 instead of a listing. Every request is logged.
+
+```sh
+go run ./cmd/docsgen serve ./site --port 8080
+# serving ./site at http://127.0.0.1:8080
+```
+
+`watch` builds once, then rebuilds whenever a `.go` or `.md` file
+under the source or docs directory changes. A failed rebuild is
+reported and watching continues. With `--port` it also serves the
+output directory while rebuilding, so the preview stays fresh.
+
+```sh
+go run ./cmd/docsgen watch ./internal/parser/testdata/samplepkg ./site \
+  --docs ./examples/docs --interval 1s --port 8080
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
