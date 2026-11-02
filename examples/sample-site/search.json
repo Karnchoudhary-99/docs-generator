@@ -1,0 +1,52 @@
+[
+  {
+    "title": "package samplepkg",
+    "url": "samplepkg.md",
+    "text": "Package samplepkg is a fixture for the docs-generator parser tests. It deliberately mixes exported and unexported declarations so tests can verify that only exported symbols are reported."
+  },
+  {
+    "title": "func Add",
+    "url": "samplepkg.md#func-add",
+    "text": "Add returns the sum of a and b."
+  },
+  {
+    "title": "type Counter",
+    "url": "samplepkg.md#type-counter",
+    "text": "Counter counts up from zero."
+  },
+  {
+    "title": "method Counter.Inc",
+    "url": "samplepkg.md#type-counter",
+    "text": "Inc increases the counter by one."
+  },
+  {
+    "title": "method Counter.Value",
+    "url": "samplepkg.md#type-counter",
+    "text": "Value returns the current count."
+  },
+  {
+    "title": "type Greeter",
+    "url": "samplepkg.md#type-greeter",
+    "text": "Greeter can greet by name."
+  },
+  {
+    "title": "type StringList",
+    "url": "samplepkg.md#type-stringlist",
+    "text": "StringList is a list of strings."
+  },
+  {
+    "title": "const DefaultLimit",
+    "url": "samplepkg.md#const-defaultlimit",
+    "text": "DefaultLimit is the default cap used by the examples."
+  },
+  {
+    "title": "var Version",
+    "url": "samplepkg.md#var-version",
+    "text": "Version is the fixture package version string."
+  },
+  {
+    "title": "User Guide",
+    "url": "guide.md",
+    "text": "Write your own Markdown pages next to the generated API pages: pass their directory with --docs and docsgen copies them into the site, links them from the index, and adds them to search.json. Search works offline — search.json is a plain list of title, URL, and text entries, so any static host or tiny script can query it."
+  }
+]
