@@ -7,8 +7,8 @@ Generate beautiful docs from code comments and Markdown — in Go.
 - [x] Project scaffold (README roadmap, license, gitignore)
 - [x] Go doc-comment parser (packages, functions, types)
 - [x] Markdown site generator (index, search, themes)
-- [ ] CLI (generate, serve, watch) + tests
-- [ ] Self-review checklist, then public
+- [x] CLI (generate, serve, watch) + tests
+- [x] Self-review checklist, then public
 
 ## Go doc-comment parser
 
