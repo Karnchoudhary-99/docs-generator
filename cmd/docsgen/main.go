@@ -16,6 +16,7 @@ import (
 	"github.com/Karnchoudhary-99/docs-generator/internal/parser"
 	"github.com/Karnchoudhary-99/docs-generator/internal/serve"
 	"github.com/Karnchoudhary-99/docs-generator/internal/site"
+	"github.com/Karnchoudhary-99/docs-generator/internal/watch"
 )
 
 func main() {
@@ -33,6 +34,8 @@ func main() {
 		err = runGenerate(os.Args[2:])
 	case "serve":
 		err = runServe(os.Args[2:])
+	case "watch":
+		err = runWatch(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "docsgen: unknown command %q\n", os.Args[1])
 		usage()
@@ -49,6 +52,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "       docsgen site <srcdir> <outdir> [--theme classic|compact] [--docs <dir>]")
 	fmt.Fprintln(os.Stderr, "       docsgen generate <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--dry-run]")
 	fmt.Fprintln(os.Stderr, "       docsgen serve <dir> [--addr 127.0.0.1] [--port 8080]")
+	fmt.Fprintln(os.Stderr, "       docsgen watch <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--interval 1s]")
 }
 
 // runParse parses the Go package in dir and prints a summary, or JSON
@@ -347,4 +351,70 @@ func runServe(args []string) error {
 		defer cancel()
 		return srv.Shutdown(shutdown)
 	}
+}
+
+// runWatch builds the site once, then rebuilds it whenever a .go or
+// .md file under srcdir (or docsdir) changes. A failed rebuild is
+// reported and watching continues.
+func runWatch(args []string) error {
+	var plain []string
+	interval := time.Second
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--interval":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--interval requires a value")
+			}
+			i++
+			d, err := time.ParseDuration(args[i])
+			if err != nil {
+				return fmt.Errorf("invalid --interval %q", args[i])
+			}
+			interval = d
+		case strings.HasPrefix(arg, "--interval="):
+			d, err := time.ParseDuration(strings.TrimPrefix(arg, "--interval="))
+			if err != nil {
+				return fmt.Errorf("invalid --interval %q", strings.TrimPrefix(arg, "--interval="))
+			}
+			interval = d
+		default:
+			plain = append(plain, arg)
+		}
+	}
+	srcDir, outDir, docsDir, themeName, rest, err := parseGenerateArgs(plain)
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return fmt.Errorf("unknown flag %q", rest[0])
+	}
+	theme, err := site.ParseTheme(themeName)
+	if err != nil {
+		return err
+	}
+	rebuild := func() {
+		pkg, docs, err := loadForGenerate(srcDir, docsDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "watch: rebuild failed: %v\n", err)
+			return
+		}
+		if err := site.Generate(pkg, docs, theme, outDir); err != nil {
+			fmt.Fprintf(os.Stderr, "watch: rebuild failed: %v\n", err)
+			return
+		}
+		fmt.Printf("rebuilt %s at %s\n", outDir, time.Now().Format(time.TimeOnly))
+	}
+	rebuild()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	dirs := []string{srcDir}
+	if docsDir != "" {
+		dirs = append(dirs, docsDir)
+	}
+	fmt.Printf("watching %s for changes (interval %s)\n", strings.Join(dirs, ", "), interval)
+	if err := watch.Run(ctx, dirs, interval, rebuild); err != nil && err != context.Canceled {
+		return err
+	}
+	return nil
 }
