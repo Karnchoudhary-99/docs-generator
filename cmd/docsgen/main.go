@@ -52,7 +52,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "       docsgen site <srcdir> <outdir> [--theme classic|compact] [--docs <dir>]")
 	fmt.Fprintln(os.Stderr, "       docsgen generate <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--dry-run]")
 	fmt.Fprintln(os.Stderr, "       docsgen serve <dir> [--addr 127.0.0.1] [--port 8080]")
-	fmt.Fprintln(os.Stderr, "       docsgen watch <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--interval 1s]")
+	fmt.Fprintln(os.Stderr, "       docsgen watch <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--interval 1s] [--port 0]")
 }
 
 // runParse parses the Go package in dir and prints a summary, or JSON
@@ -355,13 +355,31 @@ func runServe(args []string) error {
 
 // runWatch builds the site once, then rebuilds it whenever a .go or
 // .md file under srcdir (or docsdir) changes. A failed rebuild is
-// reported and watching continues.
+// reported and watching continues. With --port nonzero it also serves
+// outdir for preview while rebuilding.
 func runWatch(args []string) error {
 	var plain []string
 	interval := time.Second
+	port := 0
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
+		case arg == "--port":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--port requires a value")
+			}
+			i++
+			p, err := strconv.Atoi(args[i])
+			if err != nil {
+				return fmt.Errorf("invalid --port %q", args[i])
+			}
+			port = p
+		case strings.HasPrefix(arg, "--port="):
+			p, err := strconv.Atoi(strings.TrimPrefix(arg, "--port="))
+			if err != nil {
+				return fmt.Errorf("invalid --port %q", strings.TrimPrefix(arg, "--port="))
+			}
+			port = p
 		case arg == "--interval":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--interval requires a value")
@@ -408,6 +426,18 @@ func runWatch(args []string) error {
 	rebuild()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	if port != 0 {
+		srv := serve.NewServer(fmt.Sprintf("127.0.0.1:%d", port), outDir, os.Stdout)
+		fmt.Printf("serving %s at http://127.0.0.1:%d\n", outDir, port)
+		go func() {
+			_ = srv.ListenAndServe()
+		}()
+		defer func() {
+			shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(shutdown)
+		}()
+	}
 	dirs := []string{srcDir}
 	if docsDir != "" {
 		dirs = append(dirs, docsDir)
