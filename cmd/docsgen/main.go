@@ -2,12 +2,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/Karnchoudhary-99/docs-generator/internal/parser"
+	"github.com/Karnchoudhary-99/docs-generator/internal/serve"
 	"github.com/Karnchoudhary-99/docs-generator/internal/site"
 )
 
@@ -24,6 +31,8 @@ func main() {
 		err = runSite(os.Args[2:])
 	case "generate":
 		err = runGenerate(os.Args[2:])
+	case "serve":
+		err = runServe(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "docsgen: unknown command %q\n", os.Args[1])
 		usage()
@@ -39,6 +48,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "usage: docsgen parse <dir> [--json]")
 	fmt.Fprintln(os.Stderr, "       docsgen site <srcdir> <outdir> [--theme classic|compact] [--docs <dir>]")
 	fmt.Fprintln(os.Stderr, "       docsgen generate <srcdir> <outdir> [--theme classic|compact] [--docs <dir>] [--dry-run]")
+	fmt.Fprintln(os.Stderr, "       docsgen serve <dir> [--addr 127.0.0.1] [--port 8080]")
 }
 
 // runParse parses the Go package in dir and prints a summary, or JSON
@@ -269,4 +279,72 @@ func runGenerate(args []string) error {
 	}
 	printSummary(pkg, docs, outDir)
 	return nil
+}
+
+// runServe previews the generated site in dir on --addr:--port until
+// interrupted, shutting down gracefully on SIGINT/SIGTERM.
+func runServe(args []string) error {
+	var dir, addr string
+	port := 8080
+	addr = "127.0.0.1"
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--port":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--port requires a value")
+			}
+			i++
+			p, err := strconv.Atoi(args[i])
+			if err != nil {
+				return fmt.Errorf("invalid --port %q", args[i])
+			}
+			port = p
+		case strings.HasPrefix(arg, "--port="):
+			p, err := strconv.Atoi(strings.TrimPrefix(arg, "--port="))
+			if err != nil {
+				return fmt.Errorf("invalid --port %q", strings.TrimPrefix(arg, "--port="))
+			}
+			port = p
+		case arg == "--addr":
+			if i+1 >= len(args) {
+				return fmt.Errorf("--addr requires a value")
+			}
+			i++
+			addr = args[i]
+		case strings.HasPrefix(arg, "--addr="):
+			addr = strings.TrimPrefix(arg, "--addr=")
+		case strings.HasPrefix(arg, "-"):
+			return fmt.Errorf("unknown flag %q", arg)
+		case dir == "":
+			dir = arg
+		default:
+			return fmt.Errorf("unexpected argument %q", arg)
+		}
+	}
+	if dir == "" {
+		return fmt.Errorf("serve requires a directory argument")
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return err
+	}
+	listen := fmt.Sprintf("%s:%d", addr, port)
+	srv := serve.NewServer(listen, dir, os.Stdout)
+	fmt.Printf("serving %s at http://%s\n", dir, listen)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	errCh := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdown)
+	}
 }
