@@ -77,18 +77,18 @@ func printPackage(pkg *parser.Package) {
 		printDoc(fn.Doc)
 	}
 	for _, typ := range pkg.Types {
-		fmt.Printf("\ntype %s\n", typ.Declaration)
+		fmt.Printf("\n%s\n", typ.Declaration)
 		printDoc(typ.Doc)
 		for _, m := range typ.Methods {
 			fmt.Printf("  method %s\n", m.Signature)
 		}
 	}
 	for _, val := range pkg.Consts {
-		fmt.Printf("\nconst %s\n", val.Declaration)
+		fmt.Printf("\n%s\n", val.Declaration)
 		printDoc(val.Doc)
 	}
 	for _, val := range pkg.Vars {
-		fmt.Printf("\nvar %s\n", val.Declaration)
+		fmt.Printf("\n%s\n", val.Declaration)
 		printDoc(val.Doc)
 	}
 }
